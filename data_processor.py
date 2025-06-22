@@ -33,7 +33,7 @@ class DataProcessor:
             return f"{percentage:.1f}%"
     
     def process_financial_statement(self, data: Dict[str, Any]) -> Optional[pd.DataFrame]:
-        """Process financial statement data into DataFrame"""
+        """Process financial statement data into formatted table with months as columns"""
         try:
             # Extract the actual data - structure may vary
             if isinstance(data, list) and len(data) > 0:
@@ -44,9 +44,82 @@ class DataProcessor:
             if not result_data:
                 return None
             
-            # Convert to DataFrame - adapt based on actual structure
+            # Convert to DataFrame first
             df = pd.DataFrame(result_data)
-            return df
+            
+            # Check if we have the required columns
+            if 'timestamp' not in df.columns or 'metric_id' not in df.columns or 'value' not in df.columns:
+                return df  # Return original if structure is different
+            
+            # Convert timestamp to datetime and extract month-year
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df['month_year'] = df['timestamp'].dt.strftime('%b %Y')
+            
+            # Get all unique metrics and months (no filtering)
+            all_metrics = df['metric_id'].unique()
+            all_months = df['month_year'].unique()
+            all_months = sorted(all_months, key=lambda x: pd.to_datetime(x, format='%b %Y'), reverse=True)
+            
+            if len(all_metrics) == 0 or len(all_months) == 0:
+                return None
+            
+            # Create pivot table
+            pivot_df = df.pivot_table(
+                index='metric_id', 
+                columns='month_year', 
+                values='value', 
+                aggfunc='mean'
+            )
+            
+            # Calculate percentage changes and format the table with symbols
+            formatted_data = {}
+            
+            for metric in all_metrics:
+                if metric in pivot_df.index:
+                    formatted_data[metric.replace('_', ' ').title()] = {}
+                    
+                    metric_row = pivot_df.loc[metric]
+                    
+                    for i, month in enumerate(all_months):
+                        if month in metric_row.index and not pd.isna(metric_row[month]):
+                            value = metric_row[month]
+                            
+                            # Calculate percentage change from previous month
+                            if i < len(all_months) - 1:
+                                prev_month = all_months[i + 1]
+                                if prev_month in metric_row.index and not pd.isna(metric_row[prev_month]):
+                                    prev_value = metric_row[prev_month]
+                                    if prev_value != 0:
+                                        pct_change = ((value - prev_value) / prev_value) * 100
+                                        
+                                        # Add symbols and format
+                                        if pct_change > 0:
+                                            symbol = "🟢"  # Green circle or use "▲" for arrow
+                                            formatted_value = f"{self.format_number(value, '$')}  {symbol}(+{pct_change:.1f}%)"
+                                        elif pct_change < 0:
+                                            symbol = "🔴"  # Red circle or use "▼" for arrow
+                                            formatted_value = f"{self.format_number(value, '$')}  {symbol}({pct_change:.1f}%)"
+                                        else:
+                                            symbol = "⚪"  # White circle or use "→" for no change
+                                            formatted_value = f"{self.format_number(value, '$')}  {symbol}(0.0%)"
+                                    else:
+                                        formatted_value = f"{self.format_number(value, '$')} (N/A)"
+                                else:
+                                    formatted_value = f"{self.format_number(value, '$')} (N/A)"
+                            else:
+                                formatted_value = f"{self.format_number(value, '$')} (N/A)"
+                            
+                            formatted_data[metric.replace('_', ' ').title()][month] = formatted_value
+                        else:
+                            # Handle missing data
+                            formatted_data[metric.replace('_', ' ').title()][month] = "N/A"
+            
+            # Convert to DataFrame with proper column order (most recent first)
+            result_df = pd.DataFrame(formatted_data).T
+            result_df = result_df.reindex(columns=all_months)
+            
+            return result_df
+            
         except Exception as e:
             print(f"Error processing financial statement: {e}")
             return None

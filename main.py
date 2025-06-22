@@ -165,9 +165,20 @@ def main():
                     st.warning(f"No data available for {metric}")
     
     # Financial Statement
-    if financial_data is not None:
+    if financial_data is not None and not financial_data.empty:
         st.header("💰 Financial Statement")
-        st.dataframe(financial_data, use_container_width=True)
+        st.dataframe(
+            financial_data, 
+            use_container_width=True,
+            height=600,
+            column_config={
+                col: st.column_config.TextColumn(col, width="medium") 
+                for col in financial_data.columns
+            }
+        )
+    else:
+        st.header("💰 Financial Statement")
+        st.info("No financial data available or data format not supported yet.")
 
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_metrics_data(_api_client, use_cache=True):
