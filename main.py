@@ -28,7 +28,6 @@ def init_components():
 
 def main():
     st.title("🚀 Raydium Analytics Dashboard")
-    st.markdown("*Real-time data from TokenTerminal API*")
     
     # Initialize components
     api_client, data_processor, ai_generator = init_components()
