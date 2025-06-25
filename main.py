@@ -48,6 +48,16 @@ def main():
         if st.button("🗑️ Clear Cache"):
             st.cache_data.clear()
             st.success("Cache cleared!")
+
+         # API Data Sources
+        st.subheader("📡 Data Sources")
+        st.markdown("""
+        - 🏢 **Token Terminal** - Financial metrics & DeFi data
+        - 🪙 **CoinGecko** - Price & market data
+        - 🌊 **DeFiLlama** - TVL & protocol analytics
+        
+        *Data is aggregated from multiple sources for comprehensive analysis*
+        """)
         
         # Last updated
         st.subheader("🕒 Last Updated")
