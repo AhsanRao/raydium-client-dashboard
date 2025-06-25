@@ -81,7 +81,7 @@ def main():
             st.metric(
                 "Revenue", 
                 data_processor.format_number(revenue, "$"),
-                data_processor.format_percentage(revenue_change)
+                data_processor.format_percentage(revenue_change) + " (30d change)" if revenue_change is not None else ""
             )
     
     with col2:
@@ -91,7 +91,7 @@ def main():
             st.metric(
                 "Fees", 
                 data_processor.format_number(fees, "$"),
-                data_processor.format_percentage(fees_change)
+                data_processor.format_percentage(fees_change) + " (30d change)" if fees_change is not None else ""
             )
     
     with col3:
@@ -101,7 +101,7 @@ def main():
             st.metric(
                 "Trading Volume", 
                 data_processor.format_number(volume, "$"),
-                data_processor.format_percentage(volume_change)
+                data_processor.format_percentage(volume_change) + " (30d change)" if volume_change is not None else ""
             )
     
     with col4:
@@ -111,7 +111,7 @@ def main():
             st.metric(
                 "Monthly Users", 
                 data_processor.format_number(mau),
-                data_processor.format_percentage(mau_change)
+                data_processor.format_percentage(mau_change) + " (30d change)" if mau_change is not None else ""
             )
     
     with col5:
@@ -121,7 +121,7 @@ def main():
             st.metric(
                 "TVL", 
                 data_processor.format_number(tvl, "$"),
-                data_processor.format_percentage(tvl_change)
+                data_processor.format_percentage(tvl_change) + " (30d change)" if tvl_change is not None else ""
             )
     
     # Detailed Metrics Table
@@ -164,12 +164,14 @@ def main():
                     st.warning(f"No data available for {metric}")
     
     # Financial Statement
+    financial_data, operational_data = load_financial_data(api_client, use_cache)
+
     if financial_data is not None and not financial_data.empty:
         st.header("💰 Financial Statement")
         st.dataframe(
             financial_data, 
             use_container_width=True,
-            height=600,
+            height=400,
             column_config={
                 col: st.column_config.TextColumn(col, width="medium") 
                 for col in financial_data.columns
@@ -177,7 +179,22 @@ def main():
         )
     else:
         st.header("💰 Financial Statement")
-        st.info("No financial data available or data format not supported yet.")
+        st.info("No financial data available.")
+
+    if operational_data is not None and not operational_data.empty:
+        st.header("📊 Operational Metrics")
+        st.dataframe(
+            operational_data, 
+            use_container_width=True,
+            height=400,
+            column_config={
+                col: st.column_config.TextColumn(col, width="medium") 
+                for col in operational_data.columns
+            }
+        )
+    else:
+        st.header("📊 Operational Metrics")
+        st.info("No operational data available.")
 
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_metrics_data(_api_client, use_cache=True):
@@ -226,7 +243,7 @@ def create_metrics_table(metrics_data, data_processor):
             rows.append({
                 'Metric': metric_name.replace('_', ' ').title(),
                 'Latest Value': data_processor.format_number(metric_data.get('latest', 0)),
-                'Change (%)': change_str,
+                'Change (30d %)': change_str,
                 'Average': data_processor.format_number(metric_data.get('avg', 0)),
             })
     
