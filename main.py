@@ -91,7 +91,6 @@ def main():
             st.metric(
                 "Revenue", 
                 data_processor.format_number(revenue, "$"),
-                data_processor.format_percentage(revenue_change) + " (30d change)" if revenue_change is not None else ""
             )
     
     with col2:
@@ -101,7 +100,6 @@ def main():
             st.metric(
                 "Fees", 
                 data_processor.format_number(fees, "$"),
-                data_processor.format_percentage(fees_change) + " (30d change)" if fees_change is not None else ""
             )
     
     with col3:
@@ -111,7 +109,6 @@ def main():
             st.metric(
                 "Trading Volume", 
                 data_processor.format_number(volume, "$"),
-                data_processor.format_percentage(volume_change) + " (30d change)" if volume_change is not None else ""
             )
     
     with col4:
@@ -121,7 +118,6 @@ def main():
             st.metric(
                 "Monthly Users", 
                 data_processor.format_number(mau),
-                data_processor.format_percentage(mau_change) + " (30d change)" if mau_change is not None else ""
             )
     
     with col5:
@@ -131,9 +127,45 @@ def main():
             st.metric(
                 "TVL", 
                 data_processor.format_number(tvl, "$"),
-                data_processor.format_percentage(tvl_change) + " (30d change)" if tvl_change is not None else ""
+                # data_processor.format_percentage(tvl_change) + " (30d change)" if tvl_change is not None else ""
             )
     
+    # Advanced Analytics Section
+    st.header("📊 Advanced Analytics")
+
+    # Pie Charts Row
+    st.subheader("📈 Breakdown Analysis")
+    pie_col1, pie_col2 = st.columns(2)
+
+    with pie_col1:
+        if metrics_data:
+            revenue_fees_pie = data_processor.create_revenue_fees_pie(metrics_data)
+            st.plotly_chart(revenue_fees_pie, use_container_width=True)
+
+    with pie_col2:
+        if metrics_data:
+            user_engagement_pie = data_processor.create_user_engagement_pie(metrics_data)
+            st.plotly_chart(user_engagement_pie, use_container_width=True)
+
+    # Stacked Bar Charts
+    st.subheader("📊 Trend Analysis")
+
+    stacked_col1, stacked_col2 = st.columns(2)
+
+    with stacked_col1:
+        with st.spinner("Loading revenue & fees trend..."):
+            revenue_fees_stacked = data_processor.create_revenue_fees_stacked_bar(api_client, use_cache)
+            st.plotly_chart(revenue_fees_stacked, use_container_width=True)
+
+    with stacked_col2:
+        with st.spinner("Loading user growth patterns..."):
+            user_growth_stacked = data_processor.create_user_growth_stacked_bar(api_client, use_cache)
+            st.plotly_chart(user_growth_stacked, use_container_width=True)
+
+    # Volume breakdown (full width)
+    with st.spinner("Loading volume breakdown..."):
+        volume_breakdown = data_processor.create_volume_breakdown_stacked_bar(api_client, use_cache)
+        st.plotly_chart(volume_breakdown, use_container_width=True)
     # Detailed Metrics Table
     st.header("📋 Detailed Metrics")
     

@@ -256,3 +256,213 @@ class DataProcessor:
         )
         
         return fig
+    
+    # Charts
+    def create_revenue_fees_pie(self, metrics_data: Dict[str, Any]) -> go.Figure:
+        """Create pie chart showing revenue vs fees breakdown"""
+        fig = go.Figure()
+        
+        revenue = metrics_data.get('revenue', {}).get('latest', 0)
+        fees = metrics_data.get('fees', {}).get('latest', 0)
+        
+        if revenue > 0 or fees > 0:
+            fig.add_trace(go.Pie(
+                labels=['Revenue', 'Fees'],
+                values=[revenue, fees],
+                hole=0.4,
+                marker_colors=['#00cc96', '#636efa']
+            ))
+        
+        fig.update_layout(
+            title="Revenue vs Fees Breakdown",
+            template="plotly_dark",
+            height=400,
+            showlegend=True
+        )
+        
+        return fig
+
+    def create_user_engagement_pie(self, metrics_data: Dict[str, Any]) -> go.Figure:
+        """Create pie chart showing user engagement ratios"""
+        fig = go.Figure()
+        
+        dau = metrics_data.get('user_dau', {}).get('latest', 0)
+        wau = metrics_data.get('user_wau', {}).get('latest', 0)
+        mau = metrics_data.get('user_mau', {}).get('latest', 0)
+        
+        # Calculate ratios - WAU excludes DAU, MAU excludes WAU
+        dau_only = dau
+        wau_only = max(0, wau - dau)
+        mau_only = max(0, mau - wau)
+        
+        if dau_only > 0 or wau_only > 0 or mau_only > 0:
+            fig.add_trace(go.Pie(
+                labels=['Daily Active', 'Weekly Active', 'Monthly Active'],
+                values=[dau_only, wau_only, mau_only],
+                hole=0.4,
+                marker_colors=['#ff6692', '#19d3f3', '#ffa15a']
+            ))
+        
+        fig.update_layout(
+            title="User Engagement Distribution",
+            template="plotly_dark",
+            height=400,
+            showlegend=True
+        )
+        
+        return fig
+
+    def create_revenue_fees_stacked_bar(self, api_client, use_cache=True) -> go.Figure:
+        """Create stacked bar chart showing revenue + fees over time"""
+        fig = go.Figure()
+        
+        # Get time series data for both metrics
+        revenue_data = api_client.get_time_series('revenue', use_cache=use_cache)
+        fees_data = api_client.get_time_series('fees', use_cache=use_cache)
+        
+        if revenue_data and fees_data:
+            revenue_df = self.process_time_series(revenue_data)
+            fees_df = self.process_time_series(fees_data)
+            
+            if revenue_df is not None and fees_df is not None:
+                # Merge on timestamp
+                merged_df = pd.merge(
+                    revenue_df[['timestamp', 'value']].rename(columns={'value': 'revenue'}),
+                    fees_df[['timestamp', 'value']].rename(columns={'value': 'fees'}),
+                    on='timestamp',
+                    how='outer'
+                ).fillna(0)
+                
+                merged_df = merged_df.sort_values('timestamp')
+                
+                fig.add_trace(go.Bar(
+                    x=merged_df['timestamp'],
+                    y=merged_df['revenue'],
+                    name='Revenue',
+                    marker_color='#00cc96'
+                ))
+                
+                fig.add_trace(go.Bar(
+                    x=merged_df['timestamp'],
+                    y=merged_df['fees'],
+                    name='Fees',
+                    marker_color='#636efa'
+                ))
+        
+        fig.update_layout(
+            title="Revenue + Fees Trend Over Time",
+            xaxis_title="Date",
+            yaxis_title="Amount ($)",
+            template="plotly_dark",
+            height=500,
+            barmode='stack'
+        )
+        
+        return fig
+
+    def create_user_growth_stacked_bar(self, api_client, use_cache=True) -> go.Figure:
+        """Create stacked bar chart showing user growth patterns"""
+        fig = go.Figure()
+        
+        # Get time series data for user metrics
+        dau_data = api_client.get_time_series('user_dau', use_cache=use_cache)
+        wau_data = api_client.get_time_series('user_wau', use_cache=use_cache)
+        mau_data = api_client.get_time_series('user_mau', use_cache=use_cache)
+        
+        dataframes = []
+        names = []
+        
+        if dau_data:
+            dau_df = self.process_time_series(dau_data)
+            if dau_df is not None:
+                dataframes.append(dau_df[['timestamp', 'value']].rename(columns={'value': 'dau'}))
+                names.append('dau')
+        
+        if wau_data:
+            wau_df = self.process_time_series(wau_data)
+            if wau_df is not None:
+                dataframes.append(wau_df[['timestamp', 'value']].rename(columns={'value': 'wau'}))
+                names.append('wau')
+        
+        if mau_data:
+            mau_df = self.process_time_series(mau_data)
+            if mau_df is not None:
+                dataframes.append(mau_df[['timestamp', 'value']].rename(columns={'value': 'mau'}))
+                names.append('mau')
+        
+        if dataframes:
+            # Merge all dataframes
+            merged_df = dataframes[0]
+            for i, df in enumerate(dataframes[1:], 1):
+                merged_df = pd.merge(merged_df, df, on='timestamp', how='outer')
+            
+            merged_df = merged_df.fillna(0).sort_values('timestamp')
+            
+            colors = ['#ff6692', '#19d3f3', '#ffa15a']
+            for i, col in enumerate(['dau', 'wau', 'mau']):
+                if col in merged_df.columns:
+                    fig.add_trace(go.Bar(
+                        x=merged_df['timestamp'],
+                        y=merged_df[col],
+                        name=col.upper(),
+                        marker_color=colors[i % len(colors)]
+                    ))
+        
+        fig.update_layout(
+            title="User Growth Patterns Over Time",
+            xaxis_title="Date",
+            yaxis_title="Number of Users",
+            template="plotly_dark",
+            height=500,
+            barmode='stack'
+        )
+        
+        return fig
+
+    def create_volume_breakdown_stacked_bar(self, api_client, use_cache=True) -> go.Figure:
+        """Create stacked bar chart for trading volume breakdown"""
+        fig = go.Figure()
+        
+        # Get time series data for volume metrics
+        trading_volume_data = api_client.get_time_series('trading_volume', use_cache=use_cache)
+        token_volume_data = api_client.get_time_series('token_trading_volume', use_cache=use_cache)
+        
+        if trading_volume_data and token_volume_data:
+            trading_df = self.process_time_series(trading_volume_data)
+            token_df = self.process_time_series(token_volume_data)
+            
+            if trading_df is not None and token_df is not None:
+                # Merge on timestamp
+                merged_df = pd.merge(
+                    trading_df[['timestamp', 'value']].rename(columns={'value': 'trading_volume'}),
+                    token_df[['timestamp', 'value']].rename(columns={'value': 'token_volume'}),
+                    on='timestamp',
+                    how='outer'
+                ).fillna(0)
+                
+                merged_df = merged_df.sort_values('timestamp')
+                
+                fig.add_trace(go.Bar(
+                    x=merged_df['timestamp'],
+                    y=merged_df['trading_volume'],
+                    name='Trading Volume',
+                    marker_color='#ab63fa'
+                ))
+                
+                fig.add_trace(go.Bar(
+                    x=merged_df['timestamp'],
+                    y=merged_df['token_volume'],
+                    name='Token Volume',
+                    marker_color='#FFA15A'
+                ))
+        
+        fig.update_layout(
+            title="Trading Volume Breakdown Over Time",
+            xaxis_title="Date",
+            yaxis_title="Volume ($)",
+            template="plotly_dark",
+            height=500,
+            barmode='stack'
+        )
+        
+        return fig
