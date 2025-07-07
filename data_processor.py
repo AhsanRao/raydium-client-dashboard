@@ -257,6 +257,52 @@ class DataProcessor:
         
         return fig
     
+    def aggregate_daily_to_weekly(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Aggregate daily data to weekly for better chart readability"""
+        if df is None or df.empty or 'timestamp' not in df.columns or 'value' not in df.columns:
+            return df
+        
+        df = df.copy()
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        df['week'] = df['timestamp'].dt.to_period('W').dt.start_time
+        
+        # Aggregate by week - use mean for ratios, sum for volumes/counts
+        metric_id = df['metric_id'].iloc[0] if 'metric_id' in df.columns else 'unknown'
+        
+        # Use sum for volume/count metrics, mean for others
+        agg_func = 'sum' if any(keyword in metric_id.lower() for keyword in ['volume', 'fees', 'revenue', 'user']) else 'mean'
+        
+        weekly_df = df.groupby(['week', 'metric_id']).agg({
+            'value': agg_func,
+            'data_id': 'first'
+        }).reset_index()
+        
+        weekly_df['timestamp'] = weekly_df['week']
+        return weekly_df[['data_id', 'metric_id', 'value', 'timestamp']]
+
+    def aggregate_daily_to_monthly(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Aggregate daily data to monthly for better chart readability"""
+        if df is None or df.empty or 'timestamp' not in df.columns or 'value' not in df.columns:
+            return df
+        
+        df = df.copy()
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        df['month'] = df['timestamp'].dt.to_period('M').dt.start_time
+        
+        # Aggregate by month
+        metric_id = df['metric_id'].iloc[0] if 'metric_id' in df.columns else 'unknown'
+        
+        # Use sum for volume/count metrics, mean for others
+        agg_func = 'sum' if any(keyword in metric_id.lower() for keyword in ['volume', 'fees', 'revenue', 'user']) else 'mean'
+        
+        monthly_df = df.groupby(['month', 'metric_id']).agg({
+            'value': agg_func,
+            'data_id': 'first'
+        }).reset_index()
+        
+        monthly_df['timestamp'] = monthly_df['month']
+        return monthly_df[['data_id', 'metric_id', 'value', 'timestamp']]
+    
     # Charts
     def create_revenue_fees_pie(self, metrics_data: Dict[str, Any]) -> go.Figure:
         """Create pie chart showing revenue vs fees breakdown"""
@@ -313,7 +359,7 @@ class DataProcessor:
         return fig
 
     def create_revenue_fees_stacked_bar(self, api_client, use_cache=True) -> go.Figure:
-        """Create stacked bar chart showing revenue + fees over time"""
+        """Create stacked bar chart showing revenue + fees over time (monthly aggregation)"""
         fig = go.Figure()
         
         # Get time series data for both metrics
@@ -325,10 +371,14 @@ class DataProcessor:
             fees_df = self.process_time_series(fees_data)
             
             if revenue_df is not None and fees_df is not None:
+                # Aggregate to monthly data for better readability
+                revenue_monthly = self.aggregate_daily_to_monthly(revenue_df)
+                fees_monthly = self.aggregate_daily_to_monthly(fees_df)
+                
                 # Merge on timestamp
                 merged_df = pd.merge(
-                    revenue_df[['timestamp', 'value']].rename(columns={'value': 'revenue'}),
-                    fees_df[['timestamp', 'value']].rename(columns={'value': 'fees'}),
+                    revenue_monthly[['timestamp', 'value']].rename(columns={'value': 'revenue'}),
+                    fees_monthly[['timestamp', 'value']].rename(columns={'value': 'fees'}),
                     on='timestamp',
                     how='outer'
                 ).fillna(0)
@@ -339,29 +389,32 @@ class DataProcessor:
                     x=merged_df['timestamp'],
                     y=merged_df['revenue'],
                     name='Revenue',
-                    marker_color='#00cc96'
+                    marker_color='#00cc96',
+                    hovertemplate='<b>Revenue</b><br>Date: %{x}<br>Amount: $%{y:,.0f}<extra></extra>'
                 ))
                 
                 fig.add_trace(go.Bar(
                     x=merged_df['timestamp'],
                     y=merged_df['fees'],
                     name='Fees',
-                    marker_color='#636efa'
+                    marker_color='#636efa',
+                    hovertemplate='<b>Fees</b><br>Date: %{x}<br>Amount: $%{y:,.0f}<extra></extra>'
                 ))
         
         fig.update_layout(
-            title="Revenue + Fees Trend Over Time",
-            xaxis_title="Date",
+            title="Monthly Revenue + Fees Trend",
+            xaxis_title="Month",
             yaxis_title="Amount ($)",
             template="plotly_dark",
             height=500,
-            barmode='stack'
+            barmode='stack',
+            hovermode='x unified'
         )
         
         return fig
 
     def create_user_growth_stacked_bar(self, api_client, use_cache=True) -> go.Figure:
-        """Create stacked bar chart showing user growth patterns"""
+        """Create stacked bar chart showing user growth patterns (weekly aggregation)"""
         fig = go.Figure()
         
         # Get time series data for user metrics
@@ -370,99 +423,104 @@ class DataProcessor:
         mau_data = api_client.get_time_series('user_mau', use_cache=use_cache)
         
         dataframes = []
-        names = []
         
         if dau_data:
             dau_df = self.process_time_series(dau_data)
             if dau_df is not None:
-                dataframes.append(dau_df[['timestamp', 'value']].rename(columns={'value': 'dau'}))
-                names.append('dau')
+                dau_weekly = self.aggregate_daily_to_weekly(dau_df)
+                dataframes.append(dau_weekly[['timestamp', 'value']].rename(columns={'value': 'dau'}))
         
         if wau_data:
             wau_df = self.process_time_series(wau_data)
             if wau_df is not None:
-                dataframes.append(wau_df[['timestamp', 'value']].rename(columns={'value': 'wau'}))
-                names.append('wau')
+                wau_weekly = self.aggregate_daily_to_weekly(wau_df)
+                dataframes.append(wau_weekly[['timestamp', 'value']].rename(columns={'value': 'wau'}))
         
         if mau_data:
             mau_df = self.process_time_series(mau_data)
             if mau_df is not None:
-                dataframes.append(mau_df[['timestamp', 'value']].rename(columns={'value': 'mau'}))
-                names.append('mau')
+                mau_weekly = self.aggregate_daily_to_weekly(mau_df)
+                dataframes.append(mau_weekly[['timestamp', 'value']].rename(columns={'value': 'mau'}))
         
         if dataframes:
             # Merge all dataframes
             merged_df = dataframes[0]
-            for i, df in enumerate(dataframes[1:], 1):
+            for df in dataframes[1:]:
                 merged_df = pd.merge(merged_df, df, on='timestamp', how='outer')
             
             merged_df = merged_df.fillna(0).sort_values('timestamp')
             
             colors = ['#ff6692', '#19d3f3', '#ffa15a']
+            labels = ['Daily Active Users', 'Weekly Active Users', 'Monthly Active Users']
+            
             for i, col in enumerate(['dau', 'wau', 'mau']):
                 if col in merged_df.columns:
                     fig.add_trace(go.Bar(
                         x=merged_df['timestamp'],
                         y=merged_df[col],
-                        name=col.upper(),
-                        marker_color=colors[i % len(colors)]
+                        name=labels[i],
+                        marker_color=colors[i],
+                        hovertemplate=f'<b>{labels[i]}</b><br>Week: %{{x}}<br>Users: %{{y:,.0f}}<extra></extra>'
                     ))
         
         fig.update_layout(
-            title="User Growth Patterns Over Time",
-            xaxis_title="Date",
+            title="Weekly User Growth Patterns",
+            xaxis_title="Week",
             yaxis_title="Number of Users",
             template="plotly_dark",
             height=500,
-            barmode='stack'
+            barmode='group',  # Changed to group for better comparison
+            hovermode='x unified'
         )
         
         return fig
 
     def create_volume_breakdown_stacked_bar(self, api_client, use_cache=True) -> go.Figure:
-        """Create stacked bar chart for trading volume breakdown"""
+        """Create stacked bar chart for trading volume breakdown (monthly aggregation)"""
         fig = go.Figure()
         
         # Get time series data for volume metrics
         trading_volume_data = api_client.get_time_series('trading_volume', use_cache=use_cache)
         token_volume_data = api_client.get_time_series('token_trading_volume', use_cache=use_cache)
         
-        if trading_volume_data and token_volume_data:
+        if trading_volume_data:
             trading_df = self.process_time_series(trading_volume_data)
+            
+            if trading_df is not None:
+                # Aggregate to monthly data
+                trading_monthly = self.aggregate_daily_to_monthly(trading_df)
+                
+                fig.add_trace(go.Bar(
+                    x=trading_monthly['timestamp'],
+                    y=trading_monthly['value'],
+                    name='Trading Volume',
+                    marker_color='#ab63fa',
+                    hovertemplate='<b>Trading Volume</b><br>Month: %{x}<br>Volume: $%{y:,.0f}<extra></extra>'
+                ))
+        
+        if token_volume_data:
             token_df = self.process_time_series(token_volume_data)
             
-            if trading_df is not None and token_df is not None:
-                # Merge on timestamp
-                merged_df = pd.merge(
-                    trading_df[['timestamp', 'value']].rename(columns={'value': 'trading_volume'}),
-                    token_df[['timestamp', 'value']].rename(columns={'value': 'token_volume'}),
-                    on='timestamp',
-                    how='outer'
-                ).fillna(0)
-                
-                merged_df = merged_df.sort_values('timestamp')
+            if token_df is not None:
+                # Aggregate to monthly data
+                token_monthly = self.aggregate_daily_to_monthly(token_df)
                 
                 fig.add_trace(go.Bar(
-                    x=merged_df['timestamp'],
-                    y=merged_df['trading_volume'],
-                    name='Trading Volume',
-                    marker_color='#ab63fa'
-                ))
-                
-                fig.add_trace(go.Bar(
-                    x=merged_df['timestamp'],
-                    y=merged_df['token_volume'],
+                    x=token_monthly['timestamp'],
+                    y=token_monthly['value'],
                     name='Token Volume',
-                    marker_color='#FFA15A'
+                    marker_color='#FFA15A',
+                    hovertemplate='<b>Token Volume</b><br>Month: %{x}<br>Volume: $%{y:,.0f}<extra></extra>'
                 ))
         
         fig.update_layout(
-            title="Trading Volume Breakdown Over Time",
-            xaxis_title="Date",
+            title="Monthly Trading Volume Breakdown",
+            xaxis_title="Month",
             yaxis_title="Volume ($)",
             template="plotly_dark",
             height=500,
-            barmode='stack'
+            barmode='stack',
+            hovermode='x unified'
         )
         
         return fig

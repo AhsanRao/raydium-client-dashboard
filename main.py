@@ -81,57 +81,66 @@ def main():
     
     # Key Metrics Overview
     st.header("📊 Key Metrics Overview")
-    
+
+    # Add time period context
+    if metrics_data:
+        # Get the latest timestamp from time series data to show data currency
+        latest_timestamp = None
+        try:
+            sample_data = load_time_series_data(api_client, 'revenue', use_cache)
+            if sample_data is not None and not sample_data.empty:
+                latest_timestamp = sample_data['timestamp'].max()
+                data_date = pd.to_datetime(latest_timestamp).strftime("%B %d, %Y")
+                st.info(f"📅 **Data as of:** {data_date} | 🕒 **Showing:** Latest daily values")
+        except:
+            st.info("📅 **Showing:** Latest available values")
+
     col1, col2, col3, col4, col5 = st.columns(5)
-    
+
     with col1:
         if 'revenue' in metrics_data:
             revenue = metrics_data['revenue']['latest']
-            revenue_change = metrics_data['revenue']['change']
             st.metric(
-                "Revenue", 
+                "Daily Revenue", 
                 data_processor.format_number(revenue, "$"),
+                help="Revenue generated in the latest recorded day"
             )
-    
+
     with col2:
         if 'fees' in metrics_data:
             fees = metrics_data['fees']['latest']
-            fees_change = metrics_data['fees']['change']
             st.metric(
-                "Fees", 
+                "Daily Fees", 
                 data_processor.format_number(fees, "$"),
+                help="Trading fees collected in the latest recorded day"
             )
-    
+
     with col3:
         if 'trading_volume' in metrics_data:
             volume = metrics_data['trading_volume']['latest']
-            volume_change = metrics_data['trading_volume']['change']
             st.metric(
-                "Trading Volume", 
+                "Daily Volume", 
                 data_processor.format_number(volume, "$"),
+                help="Trading volume in the latest recorded day"
             )
-    
+
     with col4:
         if 'user_mau' in metrics_data:
             mau = metrics_data['user_mau']['latest']
-            mau_change = metrics_data['user_mau']['change']
             st.metric(
                 "Monthly Users", 
                 data_processor.format_number(mau),
+                help="Monthly active users as of latest data"
             )
-    
+
     with col5:
         if 'tvl' in metrics_data:
             tvl = metrics_data['tvl']['latest']
-            tvl_change = metrics_data['tvl']['change']
             st.metric(
-                "TVL", 
+                "Total TVL", 
                 data_processor.format_number(tvl, "$"),
-                # data_processor.format_percentage(tvl_change) + " (30d change)" if tvl_change is not None else ""
+                help="Total Value Locked as of latest data"
             )
-    
-    # Advanced Analytics Section
-    st.header("📊 Advanced Analytics")
 
     # Pie Charts Row
     st.subheader("📈 Breakdown Analysis")
